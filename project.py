@@ -6,10 +6,15 @@ import thread
 import os
 
 
-mcser = serial.Serial('/dev/ttyS0',9600)#communication with microcontroller
+mcser = serial.Serial('/dev/ttyS0',115200)#communication with microcontroller
 mcser.timeout = 0
+while(1):
+	break
+	mcser.write("*CONTROL1#")
+	time.sleep(10)
 
 def checkACM():
+	print 'Checking ACM'
 	if(os.path.exists("/dev/ttyACM0")):
 		if(os.path.exists("/dev/ttyACM1")):
 			if(os.path.exists("/dev/ttyACM2")):
@@ -22,28 +27,38 @@ def checkACM():
 		return 1
 		
 #*********************************check ACM FILES**********************************#
-while(1):
-	failCount = 0
-	if(checkACM() == 0):
-		print 'Usb GSM Found'
-		time.sleep(2)
-		break
-	else:
-		print 'Usb GSM Not Found'
-		if(failCount > 3):
-			failCount = 0
-			mcser.write("*APP_RESTART#")
+def ACMDetectLoop():
+	while(1):
+		failCount = 0
+		if(checkACM() == 0):
+			print 'Usb GSM Found'
+			time.sleep(2)
+			break
 		else:
-			mcser.write("*GSM_RESTART#")
-		failCount = failCount + 1
-		time.sleep(20)
+			print 'Usb GSM Not Found'
+			if(failCount > 3):
+				failCount = 0
+				mcser.write("*APP_RESTART#")
+			else:
+				mcser.write("*GSM_RESTART#")
+				print 'GSM RESTART'
+			failCount = failCount + 1
+			time.sleep(20)
+ACMDetectLoop()
 
 import gsm
 import gsmfs
 import tcpsoc
 import camera
 
-
+def closeAllPorts():
+	gsm.ser.close()
+	gsmfs.fsser.close()
+	tcpsoc.tcpser.close()
+def openAllPorts():
+	gsm.ser.open()
+	gsmfs.fsser.open()
+	tcpsoc.tcpser.open()
 
 
 #***************************************TCP Task **********************************#
@@ -68,15 +83,17 @@ def tcp_task(threadName,delay):
 							break
 						if("*CONTROL#" in rec):
 							print "Control Command Received"
+							tcpsoc.WriteToServer("*TS001:CONTROLLING#")
 							gsm.controlCommandReceived = 1
 						if("*VIDEO_START#" in rec):
 							print "Video Start Command Received"
-							tcpsoc.WriteToServer("*VIDEO_START_OK#")
+							tcpsoc.WriteToServer("*TS001:VIDEO_START_OK#")
 							gsm.ftpLogin=1
 							gsm.videoBufferStart = 1
+							gsm.ftpFilenameIndex = 1
 						if("*VIDEO_STOP#" in rec):
 							print "Video Stop Command Received"
-							tcpsoc.WriteToServer("*VIDEO_STOP_OK#")
+							tcpsoc.WriteToServer("*TS001:VIDEO_STOP_OK#")
 							gsm.videoBufferStart = 0
 							gsm.ftpFilenameIndex  = 1
 							gsm.ftpLogout=1
@@ -94,15 +111,18 @@ def tcp_task(threadName,delay):
 							tcpsoc.SendTcpCommand("+++",reply="DISCONNECT")
 							break
 						time.sleep(2)
+						if(gsm.controlCommandReceivedDone == 1):
+							gsm.controlCommandReceivedDone =0
+							tcpsoc.WriteToServer("*TS001:ACK_CONTROL_DONE#")
 						#************************SIGNAL CHECK***************************#
 						loop_count = loop_count + 1
 						if(loop_count > 10):
 							loop_count = 0
 							gsm.getGsmSignalStrength()
 						if(gsm.CameraStatus == 0):
-							tcpsoc.WriteToServer("*CAM NOT FOUND:" + str(gsm.gsmSignalStrength) + "#")
+							tcpsoc.WriteToServer("*TS001:CAM NOT FOUND:" + str(gsm.gsmSignalStrength) + "#")
 						else:
-							tcpsoc.WriteToServer("*ALL IZ WELL:" + str(gsm.gsmSignalStrength) + "#")
+							tcpsoc.WriteToServer("*TS001:ALL IZ WELL:" + str(gsm.gsmSignalStrength) + "#")
 						time.sleep(3)
 
 				else:
@@ -176,12 +196,23 @@ def gsm_fs_task(threadName,delay):
 
 
 gsm.Gsminit()
+
 #gsmfs.viewallfiles()
 gsmfs.gsmformat()#delete all the files
-
+simFailCount = 0
 while(1):
 	if(gsm.checkSim()==0):
 		break
+	simFailCount = simFailCount + 1
+	if(simFailCount > 5):
+		simFailCount = 0
+		closeAllPorts()
+		mcser.write("*GSM_RESTART#")
+		print 'GSM RESTART'
+		time.sleep(30)
+		ACMDetectLoop()
+		openAllPorts()
+		gsm.Gsminit()
 	time.sleep(5)
 gsm.GPRSStop()
 gsm.GPRSStart()
@@ -222,6 +253,15 @@ while(1):
 			gsm.GPRSStart()
 			gsm.FTPLogin()
 	time.sleep(1)
+	if(gsm.controlCommandReceived == 1):
+		gsm.controlCommandReceived = 0
+		print '***********************Control 1*********************************'
+		mcser.write("*CONTROL1#")
+		time.sleep(5)
+	rec = mcser.readline()
+	print rec
+	if("*CONTROL1_DONE#" in rec):
+		gsm.controlCommandReceivedDone = 1
 	#************************TCP HEALTH CHECK***************************#
 	if(gsm.tcphealthFailCount >= 3):
 		#gsm.GPRSStop()
@@ -238,6 +278,8 @@ while(1):
 			mcser.write("*CAMERA_RESTART#")
 	else:
 		CamFailCount = 0
-		
-
+	
+	if(checkACM() == 0):
+		mcser.write("*APP_HEALTH#")
+	print "Loop"
 #****************************End  of Main Loop For Ever *****************************#

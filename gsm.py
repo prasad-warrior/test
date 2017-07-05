@@ -20,6 +20,7 @@ ftpPASSWORD	=	"prasadtest"
 
 gsmSignalStrength=0
 controlCommandReceived = 0
+controlCommandReceivedDone = 0
 videoBufferStart = 0
 tcpConnectionStatus = 0
 ftpLogin=0
