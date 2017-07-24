@@ -13,7 +13,7 @@ def checkCam():
 def recordvideo(filename,timespan=5):
 	#/home/pi/Desktop/recording.ts
 	os.system('sudo ifup eth0 > /dev/null 2>&1')
-	st = 'cvlc --no-audio rtsp://admin:admin@192.168.1.103:554/ --sout=file/mp4:' + filename + ' --stop-time=' + str(timespan) + ' vlc://quit > /dev/null 2>&1'
+	st = 'cvlc --no-audio rtsp://admin:admin@192.168.1.103:554/ --sout=file/mp4:' + filename + ' --stop-time=' + str(timespan) + ' vlc://quit'
 	print st
 	os.system(st)
 

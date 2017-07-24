@@ -51,7 +51,9 @@ CameraStatus = 0
 tcptaskpermission = 0
 camerataskpermission = 0
 gsmfstaskpermission = 0
-
+singleFileSend = 0
+singleFileSendStart = 0
+singleFileSendSaved =0
 for i in range(fileBufMaxSize):
 	camRecDone.append(0)
 
